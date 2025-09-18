@@ -262,7 +262,7 @@ class ComputerTalk:
             if len(parts) != 2:
                 return f"❌ Could not parse message command: {command}"
             
-            app_name = parts[0].strip()
+            app_name = self._extract_app_name(parts[0].strip())
             message_part = parts[1].strip()
             
             # Extract recipient and message - handle both patterns
@@ -571,10 +571,17 @@ class ComputerTalk:
         # Handle special cases first
         message_commands = [
             "a message", "message", "messages", "send message", "new message",
-            "compose message", "write message", "text message", "imessage"
+            "compose message", "write message", "text message", "imessage",
+            "my messages app", "messages app", "my message app", "message app"
         ]
         
-        if command_lower in message_commands:
+        # Check if any message command is in the string
+        for msg_cmd in message_commands:
+            if msg_cmd in command_lower:
+                return "Messages"
+        
+        # Also check for patterns like "my X app" where X contains "message"
+        if "my" in command_lower and "app" in command_lower and "message" in command_lower:
             return "Messages"
         
         # Look for common app names
