@@ -150,10 +150,19 @@ class ComputerTalk:
             from .config import set_task_description
             set_task_description("")
             return "✅ Task cleared. You can set a new one anytime."
-        elif message.lower().startswith("open "):
-            # Handle app opening commands with intelligent parsing
+        elif message.lower().startswith("open ") or message.lower().startswith("pen ") or message.lower().startswith("ope "):
+            # Handle app opening commands with intelligent parsing (including common typos)
             self.logger.debug(f"Processing open message: '{message}'")
+            # Fix common typos
+            if message.lower().startswith("pen "):
+                message = "open " + message[4:]
+            elif message.lower().startswith("ope "):
+                message = "open " + message[4:]
             return self._handle_open_command(message)
+        elif "send a message to " in message.lower() and (" saying " in message.lower() or self._is_likely_message_command(message)):
+            # Handle direct message commands without "open"
+            self.logger.debug(f"Processing direct message: '{message}'")
+            return self._handle_direct_message_command(message)
         elif message.lower() == "list apps" or message.lower().startswith("list apps"):
             try:
                 apps = self.list_apps()
@@ -164,6 +173,11 @@ class ComputerTalk:
                     return "No apps available"
             except Exception as e:
                 return f"❌ Failed to list apps: {e}"
+        elif message.lower() == "list contacts" or message.lower().startswith("list contacts"):
+            return "📱 To see your contacts, open the Messages app and check the sidebar. The contact name must match exactly as it appears in Messages (e.g., 'Enya Mistry' not 'Enya')."
+        elif message.lower().startswith("find contact "):
+            contact_name = message[13:].strip()
+            return f"🔍 To find contact '{contact_name}':\n1. Open Messages app\n2. Look in the sidebar for exact name match\n3. Use the exact name as it appears there\n\nTip: Contact names are case-sensitive and must match exactly!"
         elif message.lower() == "running apps" or message.lower().startswith("running apps"):
             try:
                 apps = self.list_running_apps()
@@ -183,6 +197,14 @@ class ComputerTalk:
             except Exception as e:
                 return f"❌ Failed to close {app_name}: {e}"
         else:
+            # Check for fuzzy matches to "open" command
+            if self._is_likely_open_command(message):
+                self.logger.debug(f"Detected likely open command: '{message}'")
+                # Try to fix the command
+                fixed_message = self._fix_open_command(message)
+                if fixed_message:
+                    return self._handle_open_command(fixed_message)
+            
             return f"Echo: {message}"
     
     def _handle_open_command(self, message: str) -> str:
@@ -253,7 +275,32 @@ class ComputerTalk:
                 recipient = recipient.strip()
                 message_text = message_text.strip().strip("'\"")
             else:
-                return f"❌ Could not parse message: {message_part}"
+                # Try to parse without "saying" - be smarter about recipient vs message
+                words = message_part.split()
+                if len(words) < 2:
+                    return f"❌ Could not parse message: {message_part}"
+                
+                # Look for common patterns to separate recipient from message
+                # If we have "Enya Mistry it works!", we want "Enya Mistry" as recipient and "it works!" as message
+                if len(words) >= 3:
+                    # Try to find where the message starts by looking for common message words
+                    message_start = 0
+                    for i, word in enumerate(words):
+                        if word.lower() in ["it", "this", "that", "hello", "hi", "hey", "thanks", "thank"]:
+                            message_start = i
+                            break
+                    
+                    if message_start > 0:
+                        recipient = " ".join(words[:message_start])
+                        message_text = " ".join(words[message_start:])
+                    else:
+                        # Fallback: assume last word is message
+                        recipient = " ".join(words[:-1])
+                        message_text = words[-1]
+                else:
+                    # Only 2 words, assume first is recipient, second is message
+                    recipient = words[0]
+                    message_text = words[1]
             
             # Open the app first
             try:
@@ -312,6 +359,202 @@ class ComputerTalk:
         except Exception as e:
             return f"❌ Failed to process action command: {e}"
     
+    def _handle_direct_message_command(self, message: str) -> str:
+        """
+        Handle direct message commands like 'send a message to X saying Y'
+        
+        Args:
+            message: The full message
+            
+        Returns:
+            Response string
+        """
+        try:
+            # Parse: "send a message to enya saying it works!" or "send a message to enya it works!"
+            if "send a message to " in message.lower():
+                if " saying " in message.lower():
+                    # Extract recipient and message with "saying"
+                    parts = message.split(" saying ", 1)
+                    if len(parts) != 2:
+                        return f"❌ Could not parse direct message: {message}"
+                    
+                    recipient_part = parts[0].replace("send a message to ", "").strip()
+                    message_text = parts[1].strip().strip("'\"")
+                    recipient = recipient_part.strip()
+                else:
+                    # Extract recipient and message without "saying"
+                    parts = message.split("send a message to ", 1)
+                    if len(parts) != 2:
+                        return f"❌ Could not parse direct message: {message}"
+                    
+                    after_send = parts[1].strip()
+                    # Split into recipient and message
+                    words = after_send.split()
+                    if len(words) < 2:
+                        return f"❌ Could not parse recipient and message: {after_send}"
+                    
+                    # Assume last word(s) are the message, rest is recipient
+                    recipient = " ".join(words[:-1])
+                    message_text = words[-1]
+                
+                # Open Messages app first
+                try:
+                    result = self.open_app("messages")
+                    if not result.get('success'):
+                        return f"❌ Failed to open Messages: {result.get('message', 'Unknown error')}"
+                except Exception as e:
+                    return f"❌ Failed to open Messages: {e}"
+                
+                # Wait a moment for app to open
+                import time
+                time.sleep(2)
+                
+                # Send the message
+                try:
+                    message_result = self._send_message_to_app("messages", recipient, message_text)
+                    if message_result.get('success'):
+                        return f"✅ Opened Messages and sent message to {recipient}: '{message_text}'"
+                    else:
+                        return f"✅ Opened Messages, but failed to send message: {message_result.get('message', 'Unknown error')}"
+                except Exception as e:
+                    return f"✅ Opened Messages, but failed to send message: {e}"
+            else:
+                return f"❌ Could not parse direct message command: {message}"
+                
+        except Exception as e:
+            return f"❌ Failed to process direct message: {e}"
+    
+    def _is_likely_open_command(self, message: str) -> bool:
+        """
+        Check if a message is likely an "open" command with a typo.
+        
+        Args:
+            message: The message to check
+            
+        Returns:
+            True if likely an open command
+        """
+        message_lower = message.lower()
+        
+        # Check for common patterns that suggest an open command
+        open_patterns = [
+            "pen ", "ope ", "oen ", "opne ", "opn ", "op ", "oen ", "opne "
+        ]
+        
+        for pattern in open_patterns:
+            if message_lower.startswith(pattern):
+                return True
+        
+        # Check if it contains app-related keywords
+        app_keywords = ["messages", "safari", "chrome", "firefox", "terminal", "finder", "notes", "calendar"]
+        if any(keyword in message_lower for keyword in app_keywords):
+            # Check if it starts with something close to "open"
+            first_word = message_lower.split()[0] if message_lower.split() else ""
+            if len(first_word) >= 2 and first_word[:2] in ["op", "pe", "oe"]:
+                return True
+        
+        return False
+    
+    def _fix_open_command(self, message: str) -> str:
+        """
+        Try to fix a message that looks like an open command.
+        
+        Args:
+            message: The message to fix
+            
+        Returns:
+            Fixed message or None if can't fix
+        """
+        message_lower = message.lower()
+        
+        # Common typo fixes
+        typo_fixes = {
+            "pen ": "open ",
+            "ope ": "open ",
+            "oen ": "open ",
+            "opne ": "open ",
+            "opn ": "open ",
+            "op ": "open ",
+        }
+        
+        for typo, fix in typo_fixes.items():
+            if message_lower.startswith(typo):
+                return fix + message[len(typo):]
+        
+        # If it contains app keywords but doesn't start with "open", try adding it
+        app_keywords = ["messages", "safari", "chrome", "firefox", "terminal", "finder", "notes", "calendar"]
+        if any(keyword in message_lower for keyword in app_keywords):
+            first_word = message.split()[0] if message.split() else ""
+            if len(first_word) >= 2 and first_word[:2] in ["op", "pe", "oe"]:
+                return "open " + message[len(first_word):].lstrip()
+        
+        return None
+    
+    def _is_likely_message_command(self, message: str) -> bool:
+        """
+        Check if a message is likely a message command even without "saying".
+        
+        Args:
+            message: The message to check
+            
+        Returns:
+            True if likely a message command
+        """
+        message_lower = message.lower()
+        
+        # Check for message command patterns
+        if "send a message to " in message_lower:
+            # Check if it has a recipient and some text after
+            parts = message_lower.split("send a message to ")
+            if len(parts) > 1:
+                after_send = parts[1].strip()
+                # If there's text after the recipient, it's likely a message
+                if len(after_send.split()) > 1:  # Has recipient + message
+                    return True
+        
+        return False
+    
+    def _list_contacts(self) -> List[str]:
+        """
+        List contacts from the Messages app.
+        
+        Returns:
+            List of contact names
+        """
+        try:
+            import subprocess
+            
+            script = '''
+            tell application "Messages"
+                set targetService to first service whose service type = iMessage
+                set buddyList to buddies of targetService
+                set contactNames to {}
+                repeat with buddy in buddyList
+                    set end of contactNames to name of buddy
+                end repeat
+                return contactNames
+            end tell
+            '''
+            
+            result = subprocess.run(["osascript", "-e", script], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                # Parse the AppleScript list output
+                contacts = []
+                for line in result.stdout.strip().split(','):
+                    contact = line.strip().strip('"')
+                    if contact:
+                        contacts.append(contact)
+                return contacts
+            else:
+                self.logger.warning(f"Failed to get contacts: {result.stderr}")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"Error listing contacts: {e}")
+            return []
+    
     def _extract_app_name(self, command: str) -> str:
         """
         Extract app name from a command string.
@@ -324,6 +567,15 @@ class ComputerTalk:
         """
         # Common patterns to extract app names
         command_lower = command.lower()
+        
+        # Handle special cases first
+        message_commands = [
+            "a message", "message", "messages", "send message", "new message",
+            "compose message", "write message", "text message", "imessage"
+        ]
+        
+        if command_lower in message_commands:
+            return "Messages"
         
         # Look for common app names
         app_patterns = [
@@ -379,34 +631,86 @@ class ComputerTalk:
         try:
             import subprocess
             
-            # Create AppleScript to send iMessage
-            script = f'''
+            # Escape special characters for AppleScript
+            def escape_applescript(text):
+                return text.replace('"', '\\"').replace('\\', '\\\\')
+            
+            escaped_recipient = escape_applescript(recipient)
+            escaped_message = escape_applescript(message)
+            
+            # Use UI method which is more forgiving with contact names
+            script_api = f'''
             tell application "Messages"
                 activate
                 delay 2
                 tell application "System Events"
                     keystroke "n" using command down
-                    delay 1
-                    keystroke "{recipient}"
+                    delay 2
+                    keystroke "{escaped_recipient}"
                     delay 1
                     keystroke return
+                    delay 3
+                    keystroke tab
                     delay 1
-                    keystroke "{message}"
+                    keystroke "{escaped_message}"
                     delay 1
                     keystroke return
                 end tell
             end tell
             '''
             
-            result = subprocess.run(["osascript", "-e", script], 
+            result = subprocess.run(["osascript", "-e", script_api], 
                                   capture_output=True, text=True, timeout=30)
             
-            return {
-                "success": result.returncode == 0,
-                "message": "iMessage sent" if result.returncode == 0 else f"Failed: {result.stderr}",
-                "stdout": result.stdout,
-                "stderr": result.stderr
-            }
+            self.logger.debug(f"Messages API result: returncode={result.returncode}, stdout={result.stdout}, stderr={result.stderr}")
+            
+            if result.returncode == 0:
+                return {
+                    "success": True,
+                    "message": "iMessage sent via API",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                }
+            
+            # Fallback to UI automation if API fails
+            self.logger.warning("Messages API failed, trying UI automation fallback")
+            script_ui = f'''
+            tell application "Messages"
+                activate
+                delay 2
+                tell application "System Events"
+                    keystroke "n" using command down
+                    delay 2
+                    keystroke "{escaped_recipient}"
+                    delay 1
+                    keystroke return
+                    delay 3
+                    keystroke tab
+                    delay 1
+                    keystroke "{escaped_message}"
+                    delay 1
+                    keystroke return
+                end tell
+            end tell
+            '''
+            
+            result = subprocess.run(["osascript", "-e", script_ui], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                return {
+                    "success": True,
+                    "message": "iMessage sent successfully",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"Failed to send iMessage. This might be because the contact '{recipient}' doesn't exist in your Messages app. Try using 'list contacts' to see available contacts, or use the exact name as it appears in Messages.",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                }
         except Exception as e:
             return {
                 "success": False,

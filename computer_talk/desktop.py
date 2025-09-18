@@ -173,7 +173,18 @@ class DesktopManager:
             except Exception:
                 continue
         
-        raise ComputerTalkError(f"Could not open {app_name} on macOS")
+        # Provide helpful suggestions for common issues
+        suggestions = []
+        if app_name.lower() in ["message", "messages"]:
+            suggestions.append("Try 'open Messages' instead")
+        elif "message" in app_name.lower():
+            suggestions.append("Did you mean 'open Messages'?")
+        
+        error_msg = f"Could not open {app_name} on macOS"
+        if suggestions:
+            error_msg += f". Suggestions: {'; '.join(suggestions)}"
+        
+        raise ComputerTalkError(error_msg)
     
     def _open_windows_app(self, app_name: str, **kwargs) -> Dict[str, Any]:
         """Open application on Windows."""

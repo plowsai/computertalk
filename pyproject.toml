@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "computer-talk"
-version = "0.1.9"
+version = "0.1.11"
 description = "A Python package for computer communication and interaction"
 readme = "README.md"
 requires-python = ">=3.8"
