@@ -229,16 +229,27 @@ class ComputerTalk:
         """
         try:
             # Parse: "messages and send a message to enya mistry that says 'it works!'"
-            parts = command.split(" and send a message to ")
+            # or "messages and send a message to enya saying it works!"
+            if " and send a message to " in command.lower():
+                parts = command.split(" and send a message to ")
+            elif " and send a message " in command.lower():
+                parts = command.split(" and send a message ")
+            else:
+                return f"❌ Could not parse message command: {command}"
+            
             if len(parts) != 2:
                 return f"❌ Could not parse message command: {command}"
             
             app_name = parts[0].strip()
             message_part = parts[1].strip()
             
-            # Extract recipient and message
+            # Extract recipient and message - handle both patterns
             if " that says " in message_part:
                 recipient, message_text = message_part.split(" that says ", 1)
+                recipient = recipient.strip()
+                message_text = message_text.strip().strip("'\"")
+            elif " saying " in message_part:
+                recipient, message_text = message_part.split(" saying ", 1)
                 recipient = recipient.strip()
                 message_text = message_text.strip().strip("'\"")
             else:
