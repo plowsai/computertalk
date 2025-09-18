@@ -7,8 +7,12 @@ import sys
 import json
 from typing import Optional
 
+# Check for onboarding BEFORE importing anything that might create config
+from .first_run import check_and_run_onboarding
+
 from .core import ComputerTalk
 from .exceptions import ComputerTalkError
+from .config import get_openai_api_key
 
 
 def main() -> None:
@@ -51,6 +55,10 @@ def main() -> None:
     
     args = parser.parse_args()
     
+    # Check for first run and run onboarding if needed
+    # Force interactive mode if --interactive flag is used
+    check_and_run_onboarding(force_interactive=args.interactive)
+    
     # Load configuration
     config = {"log_level": args.log_level}
     if args.config:
@@ -60,6 +68,11 @@ def main() -> None:
         except Exception as e:
             print(f"Error loading config file: {e}", file=sys.stderr)
             sys.exit(1)
+
+    # Add OpenAI API key if available
+    key = get_openai_api_key()
+    if key:
+        config["openai_api_key"] = key
     
     # Create ComputerTalk instance
     try:

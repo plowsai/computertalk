@@ -11,10 +11,12 @@ __email__ = "jordan@example.com"
 
 from .core import ComputerTalk
 from .exceptions import ComputerTalkError, CommunicationError, ConfigurationError
+from .config import get_user_config_path
 
 __all__ = [
     "ComputerTalk",
     "ComputerTalkError",
     "CommunicationError", 
     "ConfigurationError",
+    "get_user_config_path",
 ]

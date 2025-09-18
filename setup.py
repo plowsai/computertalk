@@ -22,6 +22,8 @@ def read_requirements():
             return [line.strip() for line in f if line.strip() and not line.startswith('#')]
     return []
 
+
+
 setup(
     name="computer-talk",
     version="0.1.0",

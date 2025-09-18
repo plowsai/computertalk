@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "computer-talk"
-version = "0.1.0"
+version = "0.1.4"
 description = "A Python package for computer communication and interaction"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Jordan", email = "jordan@example.com"}
+    {name = "Jordan", email = "jp@humanturk.com"}
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = []
+dependencies = ["openai (>=1.107.3,<2.0.0)"]
 
 [project.optional-dependencies]
 dev = [

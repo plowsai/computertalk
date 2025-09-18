@@ -36,16 +36,16 @@ clean:  ## Clean build artifacts
 	find . -name "*.pyc" -delete
 
 build: clean  ## Build the package
-	python -m build
+	python3 -m build
 
 check:  ## Check the built package
-	python -m twine check dist/*
+	python3 -m twine check dist/*
 
 upload-test:  ## Upload to test PyPI
-	python -m twine upload --repository testpypi dist/*
+	python3 -m twine upload --repository testpypi dist/*
 
 upload:  ## Upload to PyPI
-	python -m twine upload dist/*
+	python3 -m twine upload dist/*
 
 all: clean install-dev test lint format build check  ## Run all checks and build
 
