@@ -26,11 +26,17 @@ def check_and_run_onboarding(force_interactive=False):
     
     # Only show onboarding if no config exists and no key is set
     if not config_path.exists() and not existing_key:
-        print("\n" + "="*50)
+        print("\n" + "="*60)
         print("🎉 Welcome to computer-talk!")
-        print("="*50)
+        print("="*60)
         print("Thank you for installing computer-talk!")
-        print("This package enables computer communication and interaction.")
+        print("This package enables AI-powered computer communication and interaction.")
+        print()
+        print("🔐 SECURITY NOTICE:")
+        print("• You will need your own OpenAI API key")
+        print("• Your key is stored locally and securely")
+        print("• Never share your API key with others")
+        print("• Get your key at: https://platform.openai.com/api-keys")
         print()
         
         # Run interactive setup if forced or in interactive environment
@@ -42,10 +48,10 @@ def check_and_run_onboarding(force_interactive=False):
             print("  export OPENAI_API_KEY=your_key_here")
             print("  or run: computer-talk --interactive")
         
-        print("\n" + "="*50)
+        print("\n" + "="*60)
         print("✅ Setup complete! You can now use computer-talk.")
         print("Try: computer-talk --help")
-        print("="*50)
+        print("="*60)
         return True
     
     return False

@@ -68,6 +68,14 @@ def get_openai_api_key() -> Optional[str]:
     return None
 
 
+def get_openai_api_key_masked() -> Optional[str]:
+    """Get OpenAI API key with masking for logging."""
+    key = get_openai_api_key()
+    if key and len(key) > 8:
+        return f"{key[:4]}...{key[-4:]}"
+    return key
+
+
 def set_openai_api_key(key: str) -> None:
     """Store OpenAI API key in user config."""
     cfg = load_config()
@@ -104,25 +112,46 @@ def ensure_openai_api_key_interactive() -> Optional[str]:
         # Non-interactive; don't prompt
         return None
 
-    print("\nWelcome to computer-talk!\n")
-    print("To enable AI features, please provide your OpenAI API key.")
-    print("- Create a key at: https://platform.openai.com/api-keys")
-    print("- You can also set it later via the environment variable OPENAI_API_KEY")
+    print("\n" + "="*60)
+    print("🔑 OpenAI API Key Setup")
+    print("="*60)
+    print("To enable AI features, you need your own OpenAI API key.")
+    print()
+    print("📋 Steps to get your API key:")
+    print("1. Go to: https://platform.openai.com/api-keys")
+    print("2. Sign in to your OpenAI account")
+    print("3. Click 'Create new secret key'")
+    print("4. Copy the key (starts with 'sk-')")
+    print()
+    print("🔒 Security:")
+    print("• Your key is stored locally in ~/.config/computer-talk/config.json")
+    print("• The file has restricted permissions (600)")
+    print("• Never share your API key with others")
+    print("• You can also set it via: export OPENAI_API_KEY=your_key")
+    print()
 
     while True:
-        entered = input("Please enter your OpenAI API key (or press Enter to skip): ").strip()
+        entered = input("Enter your OpenAI API key (or press Enter to skip): ").strip()
         if not entered:
-            print("Skipping API key setup. You can set it later with 'export OPENAI_API_KEY=...'")
+            print("\n⚠️  Skipping API key setup.")
+            print("You can set it later with:")
+            print("  export OPENAI_API_KEY=your_key_here")
+            print("  or run: computer-talk --interactive")
             return None
-        if entered.startswith("sk-") and len(entered) >= 20:
+        
+        # Enhanced validation
+        if validate_openai_key(entered):
             set_openai_api_key(entered)
-            print("Thanks! Your key has been saved in ~/.config/computer-talk/config.json")
+            print("\n✅ API key saved successfully!")
+            print("📍 Location: ~/.config/computer-talk/config.json")
+            print("🔐 Permissions: 600 (owner read/write only)")
             
             # Prompt for task description after API key is set
-            print("\n" + "="*50)
+            print("\n" + "="*60)
             print("🎯 Task Configuration")
-            print("="*50)
+            print("="*60)
             print("Now let's configure what you want computer-talk to help you with.")
+            print("This helps the AI understand your goals and provide better assistance.")
             print()
             
             while True:
@@ -132,7 +161,7 @@ def ensure_openai_api_key_interactive() -> Optional[str]:
                     config = load_config()
                     config["task_description"] = task_description
                     save_config(config)
-                    print(f"✅ Task saved: {task_description}")
+                    print(f"\n✅ Task saved: {task_description}")
                     print("You can change this later by running: computer-talk --interactive")
                     break
                 else:
@@ -140,6 +169,42 @@ def ensure_openai_api_key_interactive() -> Optional[str]:
             
             return entered
         else:
-            print("That doesn't look like a valid key. It usually starts with 'sk-'. Try again.")
+            print("\n❌ Invalid API key format.")
+            print("OpenAI API keys typically:")
+            print("• Start with 'sk-'")
+            print("• Are 20+ characters long")
+            print("• Contain letters, numbers, and sometimes hyphens")
+            print("• Example: sk-1234567890abcdef...")
+            print()
+
+
+def validate_openai_key(key: str) -> bool:
+    """
+    Validate OpenAI API key format.
+    
+    Args:
+        key: The API key to validate
+        
+    Returns:
+        True if the key appears valid, False otherwise
+    """
+    if not key or not isinstance(key, str):
+        return False
+    
+    key = key.strip()
+    
+    # Basic format validation
+    if not key.startswith("sk-"):
+        return False
+    
+    if len(key) < 20:
+        return False
+    
+    # Check for valid characters (alphanumeric, hyphens, underscores)
+    import re
+    if not re.match(r'^sk-[a-zA-Z0-9_-]+$', key):
+        return False
+    
+    return True
 
 

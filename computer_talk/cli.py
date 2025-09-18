@@ -48,12 +48,26 @@ def main() -> None:
     )
     
     parser.add_argument(
+        "--reset-key",
+        action="store_true",
+        help="Reset/change your OpenAI API key"
+    )
+    
+    parser.add_argument(
         "message",
         nargs="?",
         help="Message to send (non-interactive mode)"
     )
     
     args = parser.parse_args()
+    
+    # Handle reset key command
+    if args.reset_key:
+        from .config import ensure_openai_api_key_interactive
+        print("🔑 Resetting OpenAI API Key")
+        print("="*40)
+        ensure_openai_api_key_interactive()
+        return
     
     # Check for first run and run onboarding if needed
     # Force interactive mode if --interactive flag is used

@@ -7,9 +7,12 @@ import subprocess
 import platform
 import time
 import logging
+import os
+import psutil
+import shutil
+import json
 from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
-import json
 
 from .exceptions import ComputerTalkError, CommunicationError
 
@@ -24,10 +27,30 @@ class DesktopManager:
         self.system = platform.system().lower()
         self.logger = logging.getLogger(__name__)
         self.running_apps = {}
+        self.app_communication = {}  # Track app-to-app communication
+        self.system_info = self._get_system_info()
+    
+    def _get_system_info(self) -> Dict[str, Any]:
+        """Get comprehensive system information."""
+        try:
+            return {
+                "platform": platform.platform(),
+                "system": platform.system(),
+                "release": platform.release(),
+                "version": platform.version(),
+                "machine": platform.machine(),
+                "processor": platform.processor(),
+                "architecture": platform.architecture(),
+                "cpu_count": psutil.cpu_count() if 'psutil' in globals() else "unknown",
+                "python_version": platform.python_version()
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to get system info: {e}")
+            return {}
         
     def open_application(self, app_name: str, **kwargs) -> Dict[str, Any]:
         """
-        Open a desktop application.
+        Open a desktop application using AI-powered discovery.
         
         Args:
             app_name: Name or path of the application to open
@@ -42,19 +65,28 @@ class DesktopManager:
         try:
             self.logger.info(f"Opening application: {app_name}")
             
+            # First try to find the app using fuzzy matching
+            discovered_app = self._find_app_by_name(app_name)
+            if discovered_app:
+                actual_app_name = discovered_app["name"]
+                self.logger.info(f"Found app: {actual_app_name}")
+            else:
+                actual_app_name = app_name
+                self.logger.info(f"Using provided name: {actual_app_name}")
+            
             if self.system == "darwin":  # macOS
-                result = self._open_macos_app(app_name, **kwargs)
+                result = self._open_macos_app(actual_app_name, **kwargs)
             elif self.system == "windows":
-                result = self._open_windows_app(app_name, **kwargs)
+                result = self._open_windows_app(actual_app_name, **kwargs)
             elif self.system == "linux":
-                result = self._open_linux_app(app_name, **kwargs)
+                result = self._open_linux_app(actual_app_name, **kwargs)
             else:
                 raise ComputerTalkError(f"Unsupported operating system: {self.system}")
             
             # Store app info
-            app_id = f"{app_name}_{int(time.time())}"
+            app_id = f"{actual_app_name}_{int(time.time())}"
             self.running_apps[app_id] = {
-                "name": app_name,
+                "name": actual_app_name,
                 "pid": result.get("pid"),
                 "started_at": time.time(),
                 "status": "running"
@@ -63,14 +95,61 @@ class DesktopManager:
             return {
                 "success": True,
                 "app_id": app_id,
-                "app_name": app_name,
+                "app_name": actual_app_name,
                 "pid": result.get("pid"),
-                "message": f"Successfully opened {app_name}"
+                "message": f"Successfully opened {actual_app_name}"
             }
             
         except Exception as e:
             self.logger.error(f"Failed to open {app_name}: {e}")
             raise ComputerTalkError(f"Failed to open application {app_name}: {e}")
+    
+    def _find_app_by_name(self, search_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Find an app by name using fuzzy matching.
+        
+        Args:
+            search_name: Name to search for
+            
+        Returns:
+            App dictionary if found, None otherwise
+        """
+        try:
+            # Get all discovered apps
+            apps = self.discover_apps()
+            if not apps:
+                return None
+            
+            # Simple fuzzy matching
+            search_lower = search_name.lower()
+            
+            # Exact match first
+            for app in apps:
+                if app["name"].lower() == search_lower:
+                    return app
+            
+            # Partial match
+            for app in apps:
+                if search_lower in app["name"].lower():
+                    return app
+            
+            # Reverse partial match (search name in app name)
+            for app in apps:
+                if app["name"].lower() in search_lower:
+                    return app
+            
+            # Word-based matching
+            search_words = search_lower.split()
+            for app in apps:
+                app_words = app["name"].lower().split()
+                if any(word in app_words for word in search_words):
+                    return app
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error finding app {search_name}: {e}")
+            return None
     
     def _open_macos_app(self, app_name: str, **kwargs) -> Dict[str, Any]:
         """Open application on macOS."""
@@ -208,75 +287,166 @@ class DesktopManager:
         except Exception:
             return []
     
-    def get_common_apps(self) -> List[Dict[str, Any]]:
+    def discover_apps(self) -> List[Dict[str, Any]]:
         """
-        Get list of common applications that can be opened.
+        Dynamically discover applications installed on the system.
         
         Returns:
-            List of common applications with their names and descriptions
+            List of discovered applications with their names and descriptions
         """
-        common_apps = {
-            "darwin": [
-                {"name": "Safari", "description": "Web browser", "command": "Safari"},
-                {"name": "Chrome", "description": "Web browser", "command": "Google Chrome"},
-                {"name": "Firefox", "description": "Web browser", "command": "Firefox"},
-                {"name": "Terminal", "description": "Command line terminal", "command": "Terminal"},
-                {"name": "Finder", "description": "File manager", "command": "Finder"},
-                {"name": "TextEdit", "description": "Text editor", "command": "TextEdit"},
-                {"name": "Notes", "description": "Note-taking app", "command": "Notes"},
-                {"name": "Calendar", "description": "Calendar app", "command": "Calendar"},
-                {"name": "Mail", "description": "Email client", "command": "Mail"},
-                {"name": "Messages", "description": "Messaging app", "command": "Messages"},
-                {"name": "Spotify", "description": "Music streaming", "command": "Spotify"},
-                {"name": "VSCode", "description": "Code editor", "command": "Visual Studio Code"},
-                {"name": "Xcode", "description": "iOS development", "command": "Xcode"},
-                {"name": "Photos", "description": "Photo management", "command": "Photos"},
-                {"name": "Preview", "description": "PDF and image viewer", "command": "Preview"}
-            ],
-            "macOS": [
-                {"name": "Safari", "description": "Web browser", "command": "Safari"},
-                {"name": "Chrome", "description": "Web browser", "command": "Google Chrome"},
-                {"name": "Firefox", "description": "Web browser", "command": "Firefox"},
-                {"name": "Terminal", "description": "Command line terminal", "command": "Terminal"},
-                {"name": "Finder", "description": "File manager", "command": "Finder"},
-                {"name": "TextEdit", "description": "Text editor", "command": "TextEdit"},
-                {"name": "Notes", "description": "Note-taking app", "command": "Notes"},
-                {"name": "Calendar", "description": "Calendar app", "command": "Calendar"},
-                {"name": "Mail", "description": "Email client", "command": "Mail"},
-                {"name": "Messages", "description": "Messaging app", "command": "Messages"},
-                {"name": "Spotify", "description": "Music streaming", "command": "Spotify"},
-                {"name": "VSCode", "description": "Code editor", "command": "Visual Studio Code"},
-                {"name": "Xcode", "description": "iOS development", "command": "Xcode"},
-                {"name": "Photos", "description": "Photo management", "command": "Photos"},
-                {"name": "Preview", "description": "PDF and image viewer", "command": "Preview"}
-            ],
-            "Windows": [
-                {"name": "Chrome", "description": "Web browser", "command": "chrome"},
-                {"name": "Firefox", "description": "Web browser", "command": "firefox"},
-                {"name": "Edge", "description": "Web browser", "command": "msedge"},
-                {"name": "Notepad", "description": "Text editor", "command": "notepad"},
-                {"name": "Word", "description": "Word processor", "command": "winword"},
-                {"name": "Excel", "description": "Spreadsheet", "command": "excel"},
-                {"name": "PowerPoint", "description": "Presentation", "command": "powerpnt"},
-                {"name": "VSCode", "description": "Code editor", "command": "code"},
-                {"name": "Calculator", "description": "Calculator app", "command": "calc"},
-                {"name": "Paint", "description": "Image editor", "command": "mspaint"}
-            ],
-            "Linux": [
-                {"name": "Chrome", "description": "Web browser", "command": "google-chrome"},
-                {"name": "Firefox", "description": "Web browser", "command": "firefox"},
-                {"name": "Terminal", "description": "Command line", "command": "gnome-terminal"},
-                {"name": "VSCode", "description": "Code editor", "command": "code"},
-                {"name": "Gedit", "description": "Text editor", "command": "gedit"},
-                {"name": "LibreOffice", "description": "Office suite", "command": "libreoffice"},
-                {"name": "GIMP", "description": "Image editor", "command": "gimp"},
-                {"name": "Calculator", "description": "Calculator", "command": "gnome-calculator"}
-            ]
+        try:
+            if self.system == "darwin":
+                return self._discover_macos_apps()
+            elif self.system == "windows":
+                return self._discover_windows_apps()
+            elif self.system == "linux":
+                return self._discover_linux_apps()
+            else:
+                return []
+        except Exception as e:
+            self.logger.error(f"Failed to discover apps: {e}")
+            return []
+    
+    def _discover_macos_apps(self) -> List[Dict[str, Any]]:
+        """Discover macOS applications from /Applications directory."""
+        apps = []
+        try:
+            # Get applications from /Applications
+            import os
+            applications_dir = "/Applications"
+            if os.path.exists(applications_dir):
+                for item in os.listdir(applications_dir):
+                    if item.endswith('.app'):
+                        app_name = item[:-4]  # Remove .app extension
+                        app_path = os.path.join(applications_dir, item)
+                        
+                        # Get app info
+                        info_plist_path = os.path.join(app_path, "Contents", "Info.plist")
+                        description = self._get_app_description(info_plist_path, app_name)
+                        
+                        apps.append({
+                            "name": app_name,
+                            "description": description,
+                            "path": app_path,
+                            "command": app_name
+                        })
+            
+            # Also check user applications
+            user_apps_dir = os.path.expanduser("~/Applications")
+            if os.path.exists(user_apps_dir):
+                for item in os.listdir(user_apps_dir):
+                    if item.endswith('.app'):
+                        app_name = item[:-4]
+                        app_path = os.path.join(user_apps_dir, item)
+                        
+                        info_plist_path = os.path.join(app_path, "Contents", "Info.plist")
+                        description = self._get_app_description(info_plist_path, app_name)
+                        
+                        apps.append({
+                            "name": app_name,
+                            "description": description,
+                            "path": app_path,
+                            "command": app_name
+                        })
+            
+            self.logger.info(f"Discovered {len(apps)} macOS applications")
+            return apps
+            
+        except Exception as e:
+            self.logger.error(f"Failed to discover macOS apps: {e}")
+            return []
+    
+    def _get_app_description(self, info_plist_path: str, app_name: str) -> str:
+        """Get app description from Info.plist or generate one."""
+        try:
+            import plistlib
+            if os.path.exists(info_plist_path):
+                with open(info_plist_path, 'rb') as f:
+                    plist = plistlib.load(f)
+                    description = plist.get('CFBundleShortVersionString', '')
+                    if description:
+                        return f"{app_name} {description}"
+            
+            # Fallback to generic description based on app name
+            return self._generate_app_description(app_name)
+        except Exception:
+            return self._generate_app_description(app_name)
+    
+    def _generate_app_description(self, app_name: str) -> str:
+        """Generate a description based on app name."""
+        descriptions = {
+            'Safari': 'Web browser',
+            'Chrome': 'Web browser', 
+            'Firefox': 'Web browser',
+            'Terminal': 'Command line terminal',
+            'Finder': 'File manager',
+            'TextEdit': 'Text editor',
+            'Notes': 'Note-taking app',
+            'Calendar': 'Calendar app',
+            'Mail': 'Email client',
+            'Messages': 'Messaging app',
+            'Spotify': 'Music streaming',
+            'VSCode': 'Code editor',
+            'Visual Studio Code': 'Code editor',
+            'Xcode': 'iOS development',
+            'Photos': 'Photo management',
+            'Preview': 'PDF and image viewer',
+            'Notion': 'Note-taking and productivity',
+            'Slack': 'Team communication',
+            'Discord': 'Voice and text chat',
+            'Zoom': 'Video conferencing',
+            'Figma': 'Design tool',
+            'PyCharm': 'Python IDE',
+            'IntelliJ IDEA': 'Java IDE',
+            'WebStorm': 'JavaScript IDE',
+            'DataGrip': 'Database IDE',
+            'Android Studio': 'Android development',
+            'Xcode': 'iOS development',
+            'iTerm': 'Terminal emulator',
+            'Alacritty': 'Terminal emulator',
+            'Hyper': 'Terminal emulator',
+            'Docker Desktop': 'Container platform',
+            'Postman': 'API development',
+            'Insomnia': 'API client',
+            'TablePlus': 'Database client',
+            'Sequel Pro': 'MySQL client',
+            'Navicat': 'Database client',
+            'MongoDB Compass': 'MongoDB client',
+            'Redis Desktop Manager': 'Redis client',
+            'DBeaver': 'Database client',
+            'MySQL Workbench': 'MySQL client',
+            'pgAdmin': 'PostgreSQL client',
+            'Robo 3T': 'MongoDB client',
+            'Studio 3T': 'MongoDB client',
+            'MongoDB Compass': 'MongoDB client',
+            'Redis Desktop Manager': 'Redis client',
+            'DBeaver': 'Database client',
+            'MySQL Workbench': 'MySQL client',
+            'pgAdmin': 'PostgreSQL client',
+            'Robo 3T': 'MongoDB client',
+            'Studio 3T': 'MongoDB client'
         }
         
-        apps = common_apps.get(self.system, [])
-        self.logger.debug(f"Found {len(apps)} common apps for {self.system}")
-        return apps
+        return descriptions.get(app_name, f"{app_name} application")
+    
+    def _discover_windows_apps(self) -> List[Dict[str, Any]]:
+        """Discover Windows applications."""
+        # Windows app discovery would go here
+        return []
+    
+    def _discover_linux_apps(self) -> List[Dict[str, Any]]:
+        """Discover Linux applications."""
+        # Linux app discovery would go here
+        return []
+    
+    def get_common_apps(self) -> List[Dict[str, Any]]:
+        """
+        Get list of discovered applications.
+        
+        Returns:
+            List of discovered applications with their names and descriptions
+        """
+        return self.discover_apps()
     
     def interact_with_app(self, app_name: str, action: str, **kwargs) -> Dict[str, Any]:
         """

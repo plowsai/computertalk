@@ -131,6 +131,9 @@ class ComputerTalk:
         # Get user's task description
         task_description = get_task_description()
         
+        # Add debug logging
+        self.logger.debug(f"Processing message: '{message}'")
+        
         # Simple echo response for demonstration
         if message.lower().startswith("hello"):
             return f"Hello! I received your message: {message}"
@@ -148,13 +151,9 @@ class ComputerTalk:
             set_task_description("")
             return "✅ Task cleared. You can set a new one anytime."
         elif message.lower().startswith("open "):
-            # Handle app opening commands
-            app_name = message[5:].strip()
-            try:
-                result = self.open_app(app_name)
-                return f"✅ {result['message']}"
-            except Exception as e:
-                return f"❌ Failed to open {app_name}: {e}"
+            # Handle app opening commands with intelligent parsing
+            self.logger.debug(f"Processing open message: '{message}'")
+            return self._handle_open_command(message)
         elif message.lower() == "list apps" or message.lower().startswith("list apps"):
             try:
                 apps = self.list_apps()
@@ -185,6 +184,237 @@ class ComputerTalk:
                 return f"❌ Failed to close {app_name}: {e}"
         else:
             return f"Echo: {message}"
+    
+    def _handle_open_command(self, message: str) -> str:
+        """
+        Handle 'open' commands with intelligent parsing.
+        
+        Args:
+            message: The full message starting with 'open'
+            
+        Returns:
+            Response string
+        """
+        # Remove 'open' prefix
+        command = message[5:].strip()
+        self.logger.debug(f"Processing open command: '{command}'")
+        
+        # Parse different types of open commands
+        if " and send a message to " in command.lower() or " and send a message " in command.lower():
+            self.logger.debug("Detected message command")
+            return self._handle_open_and_message_command(command)
+        elif " and " in command.lower():
+            self.logger.debug("Detected action command")
+            return self._handle_open_and_action_command(command)
+        else:
+            # Simple app opening - extract just the app name
+            self.logger.debug("Detected simple app opening")
+            app_name = self._extract_app_name(command)
+            self.logger.debug(f"Extracted app name: '{app_name}'")
+            try:
+                result = self.open_app(app_name)
+                return f"✅ {result['message']}"
+            except Exception as e:
+                return f"❌ Failed to open {app_name}: {e}"
+    
+    def _handle_open_and_message_command(self, command: str) -> str:
+        """
+        Handle commands like 'open messages and send a message to X that says Y'
+        
+        Args:
+            command: The command after 'open'
+            
+        Returns:
+            Response string
+        """
+        try:
+            # Parse: "messages and send a message to enya mistry that says 'it works!'"
+            parts = command.split(" and send a message to ")
+            if len(parts) != 2:
+                return f"❌ Could not parse message command: {command}"
+            
+            app_name = parts[0].strip()
+            message_part = parts[1].strip()
+            
+            # Extract recipient and message
+            if " that says " in message_part:
+                recipient, message_text = message_part.split(" that says ", 1)
+                recipient = recipient.strip()
+                message_text = message_text.strip().strip("'\"")
+            else:
+                return f"❌ Could not parse message: {message_part}"
+            
+            # Open the app first
+            try:
+                result = self.open_app(app_name)
+                if not result.get('success'):
+                    return f"❌ Failed to open {app_name}: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Failed to open {app_name}: {e}"
+            
+            # Wait a moment for app to open
+            import time
+            time.sleep(2)
+            
+            # Send the message
+            try:
+                message_result = self._send_message_to_app(app_name, recipient, message_text)
+                if message_result.get('success'):
+                    return f"✅ Opened {app_name} and sent message to {recipient}: '{message_text}'"
+                else:
+                    return f"✅ Opened {app_name}, but failed to send message: {message_result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"✅ Opened {app_name}, but failed to send message: {e}"
+                
+        except Exception as e:
+            return f"❌ Failed to process message command: {e}"
+    
+    def _handle_open_and_action_command(self, command: str) -> str:
+        """
+        Handle commands like 'open app and do something'
+        
+        Args:
+            command: The command after 'open'
+            
+        Returns:
+            Response string
+        """
+        try:
+            parts = command.split(" and ", 1)
+            if len(parts) != 2:
+                return f"❌ Could not parse action command: {command}"
+            
+            app_name = parts[0].strip()
+            action = parts[1].strip()
+            
+            # Open the app first
+            try:
+                result = self.open_app(app_name)
+                if not result.get('success'):
+                    return f"❌ Failed to open {app_name}: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Failed to open {app_name}: {e}"
+            
+            # Handle the action
+            return f"✅ Opened {app_name}. Action '{action}' would be executed here."
+            
+        except Exception as e:
+            return f"❌ Failed to process action command: {e}"
+    
+    def _extract_app_name(self, command: str) -> str:
+        """
+        Extract app name from a command string.
+        
+        Args:
+            command: The command string
+            
+        Returns:
+            Extracted app name
+        """
+        # Common patterns to extract app names
+        command_lower = command.lower()
+        
+        # Look for common app names
+        app_patterns = [
+            "messages", "message", "mail", "email", "safari", "chrome", "firefox",
+            "terminal", "finder", "notes", "calendar", "slack", "discord", "zoom",
+            "notion", "figma", "vscode", "code", "xcode", "photos", "preview",
+            "spotify", "music", "itunes", "textedit", "pages", "numbers", "keynote"
+        ]
+        
+        for pattern in app_patterns:
+            if pattern in command_lower:
+                return pattern.title() if pattern in ["vscode", "xcode"] else pattern.capitalize()
+        
+        # If no pattern matches, try to extract the first word
+        words = command.split()
+        if words:
+            return words[0].capitalize()
+        
+        return command.strip()
+    
+    def _send_message_to_app(self, app_name: str, recipient: str, message: str) -> Dict[str, Any]:
+        """
+        Send a message through an app.
+        
+        Args:
+            app_name: Name of the app to use
+            recipient: Recipient of the message
+            message: Message content
+            
+        Returns:
+            Result dictionary
+        """
+        try:
+            if app_name.lower() in ["messages", "message"]:
+                return self._send_imessage(recipient, message)
+            elif app_name.lower() in ["slack"]:
+                return self._send_slack_message(recipient, message)
+            elif app_name.lower() in ["discord"]:
+                return self._send_discord_message(recipient, message)
+            else:
+                return {
+                    "success": False,
+                    "message": f"Message sending not supported for {app_name}"
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to send message: {e}"
+            }
+    
+    def _send_imessage(self, recipient: str, message: str) -> Dict[str, Any]:
+        """Send an iMessage using AppleScript."""
+        try:
+            import subprocess
+            
+            # Create AppleScript to send iMessage
+            script = f'''
+            tell application "Messages"
+                activate
+                delay 2
+                tell application "System Events"
+                    keystroke "n" using command down
+                    delay 1
+                    keystroke "{recipient}"
+                    delay 1
+                    keystroke return
+                    delay 1
+                    keystroke "{message}"
+                    delay 1
+                    keystroke return
+                end tell
+            end tell
+            '''
+            
+            result = subprocess.run(["osascript", "-e", script], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            return {
+                "success": result.returncode == 0,
+                "message": "iMessage sent" if result.returncode == 0 else f"Failed: {result.stderr}",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to send iMessage: {e}"
+            }
+    
+    def _send_slack_message(self, recipient: str, message: str) -> Dict[str, Any]:
+        """Send a Slack message (placeholder)."""
+        return {
+            "success": False,
+            "message": "Slack integration not yet implemented"
+        }
+    
+    def _send_discord_message(self, recipient: str, message: str) -> Dict[str, Any]:
+        """Send a Discord message (placeholder)."""
+        return {
+            "success": False,
+            "message": "Discord integration not yet implemented"
+        }
             
     def get_status(self) -> Dict[str, Any]:
         """
