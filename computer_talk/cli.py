@@ -12,7 +12,7 @@ from .first_run import check_and_run_onboarding
 
 from .core import ComputerTalk
 from .exceptions import ComputerTalkError
-from .config import get_openai_api_key
+from .config import get_openai_api_key, get_task_description
 
 
 def main() -> None:
@@ -106,6 +106,14 @@ def run_interactive_mode(talk: ComputerTalk) -> None:
     """Run interactive mode."""
     print("Computer Talk - Interactive Mode")
     print("Type 'help' for commands, 'quit' to exit")
+    
+    # Show current task if set
+    task_description = get_task_description()
+    if task_description:
+        print(f"Current task: {task_description}")
+    else:
+        print("No task set. Run 'computer-talk --interactive' to configure.")
+    
     print("-" * 40)
     
     while True:

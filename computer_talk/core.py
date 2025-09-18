@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Optional, Dict, Any, List
 from .exceptions import ComputerTalkError, CommunicationError
+from .config import get_task_description
 
 
 class ComputerTalk:
@@ -125,15 +126,32 @@ class ComputerTalk:
         Returns:
             Processed response
         """
+        # Get user's task description
+        task_description = get_task_description()
+        
         # Simple echo response for demonstration
         if message.lower().startswith("hello"):
-            return f"Hello! I received your message: {message}"
+            greeting = f"Hello! I received your message: {message}"
+            if task_description:
+                greeting += f"\n\nI'm here to help you with: {task_description}"
+            return greeting
         elif message.lower().startswith("time"):
             return f"Current time: {time.strftime('%Y-%m-%d %H:%M:%S')}"
         elif message.lower().startswith("status"):
-            return f"Status: Running, uptime: {time.time():.2f} seconds"
+            status_msg = f"Status: Running, uptime: {time.time():.2f} seconds"
+            if task_description:
+                status_msg += f"\nTask: {task_description}"
+            return status_msg
+        elif message.lower().startswith("task"):
+            if task_description:
+                return f"Your current task: {task_description}"
+            else:
+                return "No task description set. Run 'computer-talk --interactive' to set one."
         else:
-            return f"Echo: {message}"
+            response = f"Echo: {message}"
+            if task_description:
+                response += f"\n\n(Remember: I'm helping you with: {task_description})"
+            return response
             
     def get_status(self) -> Dict[str, Any]:
         """

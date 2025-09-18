@@ -75,6 +75,22 @@ def set_openai_api_key(key: str) -> None:
     save_config(cfg)
 
 
+def get_task_description() -> Optional[str]:
+    """Get the user's task description from config."""
+    cfg = load_config()
+    task = cfg.get("task_description")
+    if isinstance(task, str) and task.strip():
+        return task.strip()
+    return None
+
+
+def set_task_description(task: str) -> None:
+    """Store task description in user config."""
+    cfg = load_config()
+    cfg["task_description"] = task.strip()
+    save_config(cfg)
+
+
 def ensure_openai_api_key_interactive() -> Optional[str]:
     """
     Ensure an OpenAI API key is available. If missing and running in an interactive
@@ -101,6 +117,27 @@ def ensure_openai_api_key_interactive() -> Optional[str]:
         if entered.startswith("sk-") and len(entered) >= 20:
             set_openai_api_key(entered)
             print("Thanks! Your key has been saved in ~/.config/computer-talk/config.json")
+            
+            # Prompt for task description after API key is set
+            print("\n" + "="*50)
+            print("🎯 Task Configuration")
+            print("="*50)
+            print("Now let's configure what you want computer-talk to help you with.")
+            print()
+            
+            while True:
+                task_description = input("Describe your task to complete: ").strip()
+                if task_description:
+                    # Save the task description to config
+                    config = load_config()
+                    config["task_description"] = task_description
+                    save_config(config)
+                    print(f"✅ Task saved: {task_description}")
+                    print("You can change this later by running: computer-talk --interactive")
+                    break
+                else:
+                    print("Please provide a task description to continue.")
+            
             return entered
         else:
             print("That doesn't look like a valid key. It usually starts with 'sk-'. Try again.")
