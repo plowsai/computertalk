@@ -106,14 +106,6 @@ def run_interactive_mode(talk: ComputerTalk) -> None:
     """Run interactive mode."""
     print("Computer Talk - Interactive Mode")
     print("Type 'help' for commands, 'quit' to exit")
-    
-    # Show current task if set
-    task_description = get_task_description()
-    if task_description:
-        print(f"Current task: {task_description}")
-    else:
-        print("No task set. Run 'computer-talk --interactive' to configure.")
-    
     print("-" * 40)
     
     while True:
@@ -138,6 +130,18 @@ def run_interactive_mode(talk: ComputerTalk) -> None:
                 for cap in capabilities:
                     print(f"  - {cap}")
                 continue
+            elif user_input.lower() == 'apps':
+                apps = talk.list_apps()
+                print("Available applications:")
+                for app in apps[:10]:
+                    print(f"  - {app['name']}: {app['description']}")
+                continue
+            elif user_input.lower() == 'running':
+                apps = talk.list_running_apps()
+                print("Currently running applications:")
+                for app in apps[:10]:
+                    print(f"  - {app['name']}")
+                continue
             
             # Send message
             response = talk.send_message(user_input)
@@ -158,7 +162,19 @@ Available commands:
   help          - Show this help message
   status        - Show current status
   capabilities  - List available capabilities
+  apps          - List available applications
+  running       - List currently running applications
   quit/exit/q   - Exit the program
+  
+Desktop app commands:
+  open <app>    - Open an application (e.g., "open Safari")
+  close <app>   - Close an application (e.g., "close Safari")
+  list apps     - List available applications
+  running apps  - List running applications
+
+Task commands:
+  task          - Show current task
+  clear task    - Clear current task
   
 Any other input will be sent as a message to the computer.
     """
